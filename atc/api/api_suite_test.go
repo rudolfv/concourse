@@ -42,6 +42,7 @@ var (
 	dbResourceFactory       *dbfakes.FakeResourceFactory
 	dbResourceConfigFactory *dbfakes.FakeResourceConfigFactory
 	fakePipeline            *dbfakes.FakePipeline
+	fakeAccess              *accessorfakes.FakeAccess
 	fakeAccessor            *accessorfakes.FakeAccessFactory
 	dbWorkerFactory         *dbfakes.FakeWorkerFactory
 	dbWorkerLifecycle       *dbfakes.FakeWorkerLifecycle
@@ -102,7 +103,10 @@ var _ = BeforeEach(func() {
 	dbTeamFactory.FindTeamReturns(dbTeam, true, nil)
 	dbTeamFactory.GetByIDReturns(dbTeam)
 
+	fakeAccess = new(accessorfakes.FakeAccess)
 	fakeAccessor = new(accessorfakes.FakeAccessFactory)
+	fakeAccessor.CreateReturns(fakeAccess)
+
 	fakePipeline = new(dbfakes.FakePipeline)
 	dbTeam.PipelineReturns(fakePipeline, true, nil)
 

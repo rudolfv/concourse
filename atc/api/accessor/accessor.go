@@ -9,6 +9,7 @@ import (
 //go:generate counterfeiter . Access
 
 type Access interface {
+	HasToken() bool
 	IsAuthenticated() bool
 	IsAuthorized(string) bool
 	IsAdmin() bool
@@ -22,8 +23,21 @@ type access struct {
 	action string
 }
 
+func (a *access) HasToken() bool {
+	return a.Token != nil
+}
+
 func (a *access) IsAuthenticated() bool {
-	return a.Token.Valid
+	return a.HasToken() && a.Token.Valid
+}
+
+func (a *access) Claims() jwt.MapClaims {
+	if a.IsAuthenticated() {
+		if claims, ok := a.Token.Claims.(jwt.MapClaims); ok {
+			return claims
+		}
+	}
+	return jwt.MapClaims{}
 }
 
 func (a *access) IsAuthorized(team string) bool {
@@ -53,45 +67,19 @@ func (a *access) HasPermission(role string) bool {
 }
 
 func (a *access) IsAdmin() bool {
-	if claims, ok := a.Token.Claims.(jwt.MapClaims); ok {
-		if isAdminClaim, ok := claims["is_admin"]; ok {
-			isAdmin, ok := isAdminClaim.(bool)
-			return ok && isAdmin
-		}
+	if isAdminClaim, ok := a.Claims()["is_admin"]; ok {
+		isAdmin, ok := isAdminClaim.(bool)
+		return ok && isAdmin
 	}
 	return false
 }
 
 func (a *access) IsSystem() bool {
-	if claims, ok := a.Token.Claims.(jwt.MapClaims); ok {
-		if isSystemClaim, ok := claims["system"]; ok {
-			isSystem, ok := isSystemClaim.(bool)
-			return ok && isSystem
-		}
+	if isSystemClaim, ok := a.Claims()["system"]; ok {
+		isSystem, ok := isSystemClaim.(bool)
+		return ok && isSystem
 	}
 	return false
-}
-
-func (a *access) TeamRoles() map[string][]string {
-	teamRoles := map[string][]string{}
-
-	if claims, ok := a.Token.Claims.(jwt.MapClaims); ok {
-		if teamsClaim, ok := claims["teams"]; ok {
-
-			// support legacy token format with team names array
-			if teamsArr, ok := teamsClaim.([]interface{}); ok {
-				for _, teamObj := range teamsArr {
-					if teamName, ok := teamObj.(string); ok {
-						teamRoles[teamName] = []string{"owner"}
-					}
-				}
-			} else {
-				_ = mapstructure.Decode(teamsClaim, &teamRoles)
-			}
-		}
-	}
-
-	return teamRoles
 }
 
 func (a *access) TeamNames() []string {
@@ -104,12 +92,30 @@ func (a *access) TeamNames() []string {
 	return teams
 }
 
-func (a *access) CSRFToken() string {
-	if claims, ok := a.Token.Claims.(jwt.MapClaims); ok {
-		if csrfTokenClaim, ok := claims["csrf"]; ok {
-			if csrfToken, ok := csrfTokenClaim.(string); ok {
-				return csrfToken
+func (a *access) TeamRoles() map[string][]string {
+	teamRoles := map[string][]string{}
+
+	if teamsClaim, ok := a.Claims()["teams"]; ok {
+
+		// support legacy token format with team names array
+		if teamsArr, ok := teamsClaim.([]interface{}); ok {
+			for _, teamObj := range teamsArr {
+				if teamName, ok := teamObj.(string); ok {
+					teamRoles[teamName] = []string{"owner"}
+				}
 			}
+		} else {
+			_ = mapstructure.Decode(teamsClaim, &teamRoles)
+		}
+	}
+
+	return teamRoles
+}
+
+func (a *access) CSRFToken() string {
+	if csrfTokenClaim, ok := a.Claims()["csrf"]; ok {
+		if csrfToken, ok := csrfTokenClaim.(string); ok {
+			return csrfToken
 		}
 	}
 	return ""
