@@ -167,7 +167,7 @@ all =
                     >> given iClickedTheHamburgerIcon
                     >> when iAmLookingAtTheIconGroup
                     >> then_ iSeeItHas5PxPadding
-            , test "icon group contains a team icon and a chevron" <|
+            , test "icon group contains a team icon and an arrow" <|
                 given iAmViewingTheDashboardOnANonPhoneScreen
                     >> given iClickedTheHamburgerIcon
                     >> when iAmLookingAtTheIconGroup
@@ -177,7 +177,7 @@ all =
                     >> given iClickedTheHamburgerIcon
                     >> when iAmLookingAtTheTeamIcon
                     >> then_ iSeeAPictureOfTwoPeople
-            , test "chevron is pointing right" <|
+            , test "arrow is pointing right" <|
                 given iAmViewingTheDashboardOnANonPhoneScreen
                     >> given iClickedTheHamburgerIcon
                     >> when iAmLookingAtTheArrow

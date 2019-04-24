@@ -47,11 +47,13 @@ import Message.TopLevelMessage exposing (TopLevelMessage(..))
 import Pipeline.Styles as Styles
 import RemoteData exposing (WebData)
 import Routes
+import Set
 import StrictEvents exposing (onLeftClickOrShiftLeftClick)
 import Svg
 import Svg.Attributes as SvgAttributes
 import UpdateMsg exposing (UpdateMsg)
 import UserState exposing (UserState)
+import Views.Icon as Icon
 import Views.PauseToggle as PauseToggle
 import Views.Styles
 import Views.TopBar as TopBar
@@ -73,6 +75,10 @@ type alias Model =
         , hideLegendCounter : Float
         , isToggleLoading : Bool
         , hovered : Maybe DomID
+        , isPhoneScreen : Bool
+        , isSideBarOpen : Bool
+        , teams : List String
+        , teamExpanded : Bool
         }
 
 
@@ -102,10 +108,19 @@ init flags =
             , selectedGroups = flags.selectedGroups
             , isUserMenuExpanded = False
             , hovered = Nothing
+            , isPhoneScreen = False
+            , isSideBarOpen = False
+            , teams = []
+            , teamExpanded = False
             }
     in
     ( model
-    , [ FetchPipeline flags.pipelineLocator, FetchVersion, ResetPipelineFocus ]
+    , [ FetchPipeline flags.pipelineLocator
+      , FetchVersion
+      , ResetPipelineFocus
+      , GetScreenSize
+      , FetchPipelines
+      ]
     )
 
 
@@ -263,6 +278,24 @@ handleCallback callback ( model, effects ) =
         VersionFetched (Err _) ->
             ( { model | experiencingTurbulence = True }, effects )
 
+        ScreenResized viewport ->
+            ( { model | isPhoneScreen = viewport.viewport.width < 812 }, effects )
+
+        PipelinesFetched (Ok pipelines) ->
+            ( { model
+                | teams =
+                    pipelines
+                        |> List.map .teamName
+                        |> Set.fromList
+                        |> Set.union (Set.fromList model.teams)
+                        |> Set.toList
+              }
+            , effects
+            )
+
+        PipelinesFetched (Err _) ->
+            ( { model | experiencingTurbulence = True }, effects )
+
         _ ->
             ( model, effects )
 
@@ -296,6 +329,9 @@ handleDelivery delivery ( model, effects ) =
 
         ClockTicked OneMinute _ ->
             ( model, effects ++ [ FetchVersion ] )
+
+        WindowResized width height ->
+            ( { model | isPhoneScreen = width < 812 }, effects )
 
         _ ->
             ( model, effects )
@@ -335,6 +371,12 @@ update msg ( model, effects ) =
                 _ ->
                     ( model, effects )
 
+        Click HamburgerMenu ->
+            ( { model | isSideBarOpen = not model.isSideBarOpen }, effects )
+
+        Click (SideBarTeam _) ->
+            ( { model | teamExpanded = True }, effects )
+
         Hover hoverable ->
             ( { model | hovered = hoverable }, effects )
 
@@ -361,6 +403,7 @@ subscriptions =
     , OnClockTick OneSecond
     , OnMouse
     , OnKeyDown
+    , OnWindowResize
     ]
 
 
@@ -378,7 +421,11 @@ view userState model =
                 , groups = model.selectedGroups
                 }
     in
-    Html.div [ Html.Attributes.style "height" "100%" ]
+    Html.div [ Html.Attributes.style "height" "100%" ] <|
+        let
+            isHamburgerClickable =
+                not <| List.isEmpty model.teams
+        in
         [ Html.div
             (id "page-including-top-bar" :: Views.Styles.pageIncludingTopBar)
             [ Html.div
@@ -387,7 +434,53 @@ view userState model =
                             isPaused model.pipeline
                        )
                 )
-                [ TopBar.concourseLogo
+                [ if model.isPhoneScreen then
+                    Html.text ""
+
+                  else
+                    Html.div
+                        [ style "border-right" <|
+                            "1px solid "
+                                ++ separatorColor model.pipeline
+                        , style "opacity" "1"
+                        , style "background-color" <|
+                            if isPaused model.pipeline then
+                                Colors.paused
+
+                            else if model.isSideBarOpen then
+                                "#333333"
+
+                            else
+                                Colors.frame
+                        ]
+                        [ Icon.icon
+                            { sizePx = 54
+                            , image = "baseline-menu-24px.svg"
+                            }
+                            ([ style "cursor" <|
+                                if isHamburgerClickable then
+                                    "pointer"
+
+                                else
+                                    "default"
+                             , onMouseEnter <| Hover <| Just HamburgerMenu
+                             , onMouseLeave <| Hover Nothing
+                             , style "opacity" <|
+                                if (model.hovered == Just HamburgerMenu) && isHamburgerClickable then
+                                    "1"
+
+                                else
+                                    "0.5"
+                             ]
+                                ++ (if isHamburgerClickable then
+                                        [ onClick <| Click HamburgerMenu ]
+
+                                    else
+                                        []
+                                   )
+                            )
+                        ]
+                , TopBar.concourseLogo
                 , TopBar.breadcrumbs route
                 , viewPinMenu
                     { pinnedResources = getPinnedResources model
@@ -415,9 +508,103 @@ view userState model =
                 ]
             , Html.div
                 (id "page-below-top-bar" :: Views.Styles.pageBelowTopBar route)
-                [ viewSubPage model ]
+              <|
+                [ case ( model.teams, model.isSideBarOpen ) of
+                    ( _, False ) ->
+                        Html.text ""
+
+                    ( [], _ ) ->
+                        Html.text ""
+
+                    ( teams, True ) ->
+                        Html.div
+                            [ id "side-bar"
+                            , style "background-color" Colors.frame
+                            , style "border-top" <|
+                                "1px solid "
+                                    ++ Colors.background
+                            , style "padding-right" "10px"
+                            , style "overflow-y" "auto"
+                            , style "max-width" "38%"
+                            ]
+                        <|
+                            List.map (sideBarPipelineGroup model) teams
+                , viewSubPage model
+                ]
             ]
         ]
+
+
+sideBarPipelineGroup :
+    { a | hovered : Maybe DomID, teamExpanded : Bool }
+    -> String
+    -> Html Message
+sideBarPipelineGroup { hovered, teamExpanded } teamName =
+    Html.div
+        [ style "display" "flex"
+        , style "cursor" "pointer"
+        , onClick <| Click <| SideBarTeam teamName
+        , onMouseEnter <| Hover <| Just <| SideBarTeam teamName
+        , onMouseLeave <| Hover Nothing
+        ]
+        [ Html.div
+            [ style "box-sizing" "border-box"
+            , style "width" "54px"
+            , style "display" "flex"
+            , style "align-items" "center"
+            , style "justify-content" "space-between"
+            , style "padding" "5px"
+            , style "flex-shrink" "0"
+            ]
+            [ Icon.icon
+                { image = "baseline-people-24px.svg"
+                , sizePx = 20
+                }
+                [ style "opacity" <|
+                    if hovered == Just (SideBarTeam teamName) then
+                        "1"
+
+                    else
+                        "0.5"
+                ]
+            , Icon.icon
+                { image =
+                    "baseline-keyboard-arrow-"
+                        ++ (if teamExpanded then
+                                "down"
+
+                            else
+                                "right"
+                           )
+                        ++ "-24px.svg"
+                , sizePx = 20
+                }
+                [ style "opacity" "1" ]
+            ]
+        , Html.div
+            [ style "font-size" "18px"
+            , style "padding" "5px"
+            , style "white-space" "nowrap"
+            , style "overflow" "hidden"
+            , style "text-overflow" "ellipsis"
+            , style "opacity" <|
+                if hovered == Just (SideBarTeam teamName) then
+                    "1"
+
+                else
+                    "0.5"
+            ]
+            [ Html.text teamName ]
+        ]
+
+
+separatorColor : WebData Concourse.Pipeline -> String
+separatorColor pipeline =
+    if isPaused pipeline then
+        Colors.pausedTopbarSeparator
+
+    else
+        Colors.background
 
 
 viewPinMenu :
@@ -510,7 +697,13 @@ isPaused p =
 
 viewSubPage : Model -> Html Message
 viewSubPage model =
-    Html.div [ class "pipeline-view" ]
+    Html.div
+        [ class "pipeline-view"
+        , id "pipeline-container"
+        , style "display" "flex"
+        , style "flex-direction" "column"
+        , style "flex-grow" "1"
+        ]
         [ viewGroupsBar model
         , Html.div [ class "pipeline-content" ]
             [ Svg.svg

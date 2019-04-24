@@ -26,6 +26,7 @@ import Network.Info
 import Network.Job
 import Network.Pipeline
 import Network.Resource
+import Network.Team
 import Network.User
 import Process
 import Task
@@ -130,6 +131,7 @@ type Effect
     | FetchBuildPrep Float Int Int
     | FetchBuildPlan Concourse.BuildId
     | FetchBuildPlanAndResources Concourse.BuildId
+    | FetchPipelines
     | GetCurrentTime
     | GetCurrentTimeZone
     | DoTriggerBuild Concourse.JobIdentifier
@@ -236,6 +238,10 @@ runEffect effect key csrfToken =
             Network.DashboardAPIData.remoteData
                 |> Task.map2 (\a b -> ( a, b )) Time.now
                 |> Task.attempt APIDataFetched
+
+        FetchPipelines ->
+            Network.Pipeline.fetchPipelines
+                |> Task.attempt PipelinesFetched
 
         GetCurrentTime ->
             Task.perform GotCurrentTime Time.now
