@@ -4,4 +4,5 @@ package db
 
 type ResourceCheck interface {
 	ID() int
+	Resource() (Resource, error)
 }
