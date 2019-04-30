@@ -336,6 +336,9 @@ type BuildFinished struct {
 }
 
 func (event BuildFinished) Emit(logger lager.Logger) {
+	logger.Debug("influxdb-emitter-fork-build-finished-emit", lager.Data{
+		"event": event,
+	})
 	emit(
 		logger.Session("build-finished"),
 		Event{

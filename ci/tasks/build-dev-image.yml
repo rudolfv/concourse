@@ -5,15 +5,13 @@ image_resource:
   source: {repository: concourse/builder}
 
 params:
-  REPOSITORY: concourse/dev
+  REPOSITORY: rudolfv/concourse-dev
   DOCKERFILE: concourse/ci/dockerfiles/dev/Dockerfile
 
 inputs:
 - name: concourse
 - name: gdn
 - name: fly-linux
-- name: fly-windows
-- name: fly-darwin
 - name: bosh-io-release-resource
 - name: bosh-io-stemcell-resource
 - name: cf-resource

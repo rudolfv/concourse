@@ -26,7 +26,14 @@ type InfluxDBConfig struct {
 	InsecureSkipVerify bool `long:"influxdb-insecure-skip-verify" description:"Skip SSL verification when emitting to InfluxDB."`
 }
 
+var (
+	batch []metric.Event
+	lastBatchTime time.Time
+)
+
 func init() {
+	batch = make([]metric.Event, 0)
+	lastBatchTime = time.Now()
 	metric.RegisterEmitter(&InfluxDBConfig{})
 }
 
@@ -51,7 +58,11 @@ func (config *InfluxDBConfig) NewEmitter() (metric.Emitter, error) {
 	}, nil
 }
 
-func (emitter *InfluxDBEmitter) Emit(logger lager.Logger, event metric.Event) {
+func emitBatch(emitter *InfluxDBEmitter, logger lager.Logger, events []metric.Event) {
+
+	logger.Debug("influxdb-emitter-fork-influxdb-emit-batch", lager.Data{
+		"size": len(events),
+	})
 	bp, err := influxclient.NewBatchPoints(influxclient.BatchPointsConfig{
 		Database: emitter.database,
 	})
@@ -60,34 +71,56 @@ func (emitter *InfluxDBEmitter) Emit(logger lager.Logger, event metric.Event) {
 		return
 	}
 
-	tags := map[string]string{
-		"host": event.Host,
-	}
+	for _, event := range events {
+		tags := map[string]string{
+			"host": event.Host,
+		}
 
-	for k, v := range event.Attributes {
-		tags[k] = v
-	}
+		for k, v := range event.Attributes {
+			tags[k] = v
+		}
 
-	point, err := influxclient.NewPoint(
-		event.Name,
-		tags,
-		map[string]interface{}{
-			"value": event.Value,
-			"state": string(event.State),
-		},
-		event.Time,
-	)
-	if err != nil {
-		logger.Error("failed-to-construct-point", err)
-		return
-	}
+		point, err := influxclient.NewPoint(
+			event.Name,
+			tags,
+			map[string]interface{}{
+				"value": event.Value,
+				"state": string(event.State),
+			},
+			event.Time,
+		)
+		if err != nil {
+			logger.Error("failed-to-construct-point", err)
+			continue
+		}
 
-	bp.AddPoint(point)
+		bp.AddPoint(point)
+	}
 
 	err = emitter.client.Write(bp)
 	if err != nil {
 		logger.Error("failed-to-send-points",
 			errors.Wrap(metric.ErrFailedToEmit, err.Error()))
 		return
+	}
+	logger.Info("influxdb-emitter-fork-influxdb-batch-emitted", lager.Data{
+		"size": len(events),
+	})
+}
+
+
+func (emitter *InfluxDBEmitter) Emit(logger lager.Logger, event metric.Event) {
+	batch = append(batch, event)
+	duration := time.Since(lastBatchTime)
+	// https://github.com/influxdata/docs.influxdata.com/issues/454
+	// https://docs.influxdata.com/influxdb/v0.13/write_protocols/write_syntax/#write-a-batch-of-points-with-curl
+	// 5000 seems to be the batch size recommended by the InfluxDB team
+	if len(batch) > 5000 || duration.Seconds() > 180 {
+		logger.Debug("influxdb-emitter-fork-influxdb-pre-emit-batch", lager.Data{
+			"size": len(batch), "seconds-since-last": duration.Seconds(),
+		})
+		go emitBatch(emitter, logger, batch)
+		batch = make([]metric.Event, 0)
+		lastBatchTime = time.Now()
 	}
 }
