@@ -67,6 +67,12 @@ var (
 )
 
 func Initialize(logger lager.Logger, host string, attributes map[string]string, bufferSize int) error {
+	logger.Debug("metric-initialize", lager.Data{
+		"host": host,
+		"attributes": attributes,
+		"buffer-size": bufferSize,
+	})
+	
 	var (
 		emitterDescriptions []string
 		err                 error

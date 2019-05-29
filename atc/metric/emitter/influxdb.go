@@ -124,7 +124,10 @@ func (emitter *InfluxDBEmitter) Emit(logger lager.Logger, event metric.Event) {
 	duration := time.Since(lastBatchTime)
 	if len(batch) > emitter.batchSize || duration > emitter.batchDuration {
 		logger.Debug("influxdb-pre-emit-batch", lager.Data{
-			"size": len(batch), "seconds-since-last": duration.Seconds(),
+			"influxdb-batch-size": emitter.batchSize,
+			"current-batch-size": len(batch),
+			"influxdb-batch-duration": emitter.batchDuration,
+			"current-duration": duration,
 		})
 		go emitBatch(emitter, logger, batch)
 		batch = make([]metric.Event, 0)
