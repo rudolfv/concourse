@@ -22,12 +22,8 @@ RUN chmod +x /usr/local/concourse/bin/gdn
 # add fly executables
 RUN mkdir /usr/local/concourse/fly-assets
 COPY fly-linux/fly-*.tgz /usr/local/concourse/fly-assets
-
-RUN wget https://github.com/concourse/concourse/releases/download/v5.0.1/fly-5.0.1-darwin-amd64.tgz
-RUN mv fly-5.0.1-darwin-amd64.tgz /usr/local/concourse/fly-assets/fly-darwin-amd64.tgz
-
-RUN wget https://github.com/concourse/concourse/releases/download/v5.0.1/fly-5.0.1-windows-amd64.zip
-RUN mv fly-5.0.1-windows-amd64.zip /usr/local/concourse/fly-assets/fly-windows-amd64.zip
+COPY fly-windows/fly-*.zip /usr/local/concourse/fly-assets
+COPY fly-darwin/fly-*.tgz /usr/local/concourse/fly-assets
 
 # add and extract resource types
 COPY bosh-io-release-resource/bosh-io-release-resource-*alpine.tgz    /concourse-resource-types/bosh-io-release.tgz
