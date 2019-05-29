@@ -125,6 +125,7 @@ type RunCommand struct {
 	Metrics struct {
 		HostName            string            `long:"metrics-host-name" description:"Host string to attach to emitted metrics."`
 		Attributes          map[string]string `long:"metrics-attribute" description:"A key-value attribute to attach to emitted metrics. Can be specified multiple times." value-name:"NAME:VALUE"`
+		BufferSize   	    uint32 	      `long:"metrics-buffer-size" default:"1000" description:"The size of the buffer that collects event metrics."`
 		CaptureErrorMetrics bool              `long:"capture-error-metrics" description:"Enable capturing of error log metrics"`
 	} `group:"Metrics & Diagnostics"`
 
@@ -1094,7 +1095,7 @@ func (cmd *RunCommand) configureMetrics(logger lager.Logger) error {
 		host, _ = os.Hostname()
 	}
 
-	return metric.Initialize(logger.Session("metrics"), host, cmd.Metrics.Attributes)
+	return metric.Initialize(logger.Session("metrics"), host, cmd.Metrics.Attributes, int(cmd.Metrics.BufferSize))
 }
 
 func (cmd *RunCommand) constructDBConn(

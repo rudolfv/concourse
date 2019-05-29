@@ -13,6 +13,8 @@ import (
 type InfluxDBEmitter struct {
 	client   influxclient.Client
 	database string
+	batchSize int
+	batchDuration time.Duration
 }
 
 type InfluxDBConfig struct {
@@ -24,6 +26,12 @@ type InfluxDBConfig struct {
 	Password string `long:"influxdb-password" description:"InfluxDB server password."`
 
 	InsecureSkipVerify bool `long:"influxdb-insecure-skip-verify" description:"Skip SSL verification when emitting to InfluxDB."`
+
+	// https://github.com/influxdata/docs.influxdata.com/issues/454
+	// https://docs.influxdata.com/influxdb/v0.13/write_protocols/write_syntax/#write-a-batch-of-points-with-curl
+	// 5000 seems to be the batch size recommended by the InfluxDB team
+	BatchSize uint32 `long:"influxdb-batch-size" default:"5000" description:"Number of points to batch together when emitting to InfluxDB."`
+	BatchDuration time.Duration `long:"influxdb-batch-duration" default:"300s" description:"The duration to wait before emitting a batch of points to InfluxDB, regardless of whether it has reached influxdb-batch-size."`
 }
 
 var (
@@ -55,12 +63,14 @@ func (config *InfluxDBConfig) NewEmitter() (metric.Emitter, error) {
 	return &InfluxDBEmitter{
 		client:   client,
 		database: config.Database,
+		batchSize: int(config.BatchSize),
+		batchDuration: config.BatchDuration,
 	}, nil
 }
 
 func emitBatch(emitter *InfluxDBEmitter, logger lager.Logger, events []metric.Event) {
 
-	logger.Debug("influxdb-emitter-fork-influxdb-emit-batch", lager.Data{
+	logger.Debug("influxdb-emit-batch", lager.Data{
 		"size": len(events),
 	})
 	bp, err := influxclient.NewBatchPoints(influxclient.BatchPointsConfig{
@@ -112,11 +122,8 @@ func emitBatch(emitter *InfluxDBEmitter, logger lager.Logger, events []metric.Ev
 func (emitter *InfluxDBEmitter) Emit(logger lager.Logger, event metric.Event) {
 	batch = append(batch, event)
 	duration := time.Since(lastBatchTime)
-	// https://github.com/influxdata/docs.influxdata.com/issues/454
-	// https://docs.influxdata.com/influxdb/v0.13/write_protocols/write_syntax/#write-a-batch-of-points-with-curl
-	// 5000 seems to be the batch size recommended by the InfluxDB team
-	if len(batch) > 5000 || duration.Seconds() > 180 {
-		logger.Debug("influxdb-emitter-fork-influxdb-pre-emit-batch", lager.Data{
+	if len(batch) > emitter.batchSize || duration > emitter.batchDuration {
+		logger.Debug("influxdb-pre-emit-batch", lager.Data{
 			"size": len(batch), "seconds-since-last": duration.Seconds(),
 		})
 		go emitBatch(emitter, logger, batch)
