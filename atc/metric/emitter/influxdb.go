@@ -31,7 +31,7 @@ type InfluxDBConfig struct {
 	// https://docs.influxdata.com/influxdb/v0.13/write_protocols/write_syntax/#write-a-batch-of-points-with-curl
 	// 5000 seems to be the batch size recommended by the InfluxDB team
 	BatchSize uint32 `long:"influxdb-batch-size" default:"5000" description:"Number of points to batch together when emitting to InfluxDB."`
-	BatchDuration time.Duration `long:"influxdb-batch-duration" default:"300s" description:"The duration to wait before emitting a batch of points to InfluxDB, regardless of whether it has reached influxdb-batch-size."`
+	BatchDuration time.Duration `long:"influxdb-batch-duration" default:"300s" description:"The duration to wait before emitting a batch of points to InfluxDB, disregarding influxdb-batch-size."`
 }
 
 var (
